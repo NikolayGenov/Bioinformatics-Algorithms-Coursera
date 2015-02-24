@@ -16,6 +16,13 @@
 *.pro *
 *.txt 
 *.txt*
-answer*
+*.out
+*.cbp
 answer
+
+CMakeFiles/
+CMakeCache.txt
 Makefile
+cmake_install.cmake
+install_manifest.txt
+!CMakeLists.txt
