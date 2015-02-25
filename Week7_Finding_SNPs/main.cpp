@@ -6,6 +6,7 @@
 
 using namespace std;
 typedef char Symbol;
+typedef string Symbols;
 typedef vector<string> Patterns;
 
 class Trie {
@@ -26,6 +27,10 @@ class Trie {
         Node* add_node(Symbol s) {
             childrens[s] = new Node();
             return childrens[s];
+        }
+
+        bool is_leaf() {
+            return childrens.size() == 0;
         }
 
         ~Node() {
@@ -53,6 +58,18 @@ class Trie {
         rec_print(root, os);
     }
 
+    vector<int> matching(const Symbols& text) {
+        size_t pos = 0;
+        vector<int> positions;
+        while (pos < text.size()) {
+            if (prefix_matching(text.substr(pos)))
+                positions.push_back(pos);
+            ++pos;
+        }
+        return positions;
+    }
+
+
     ~Trie() {
         delete root;
     }
@@ -68,22 +85,45 @@ class Trie {
             rec_print(child.second, os);
         }
     }
+
+    bool prefix_matching(const Symbols& text) {
+        int count = 0;
+        Symbol sym = text[count];
+        Node* v = root;
+        while (true) {
+            if (v->is_leaf()) {
+                return true;
+            } else if (v->has_edge_with_symbol(sym)) {
+                ++count;
+                v = v->get_node_with_symbol(sym);
+                sym = text[count];
+            } else
+                return false;
+        }
+    }
 };
 int Trie::numberNodes = 0;
 
-void read_file(ifstream& file, Patterns& p) {
+void read_file(ifstream& file, Symbols& s, Patterns& p) {
     string str;
+    file >> s;
     while (file >> str)
         p.push_back(str);
+}
+void print_vector(ofstream& os, vector<int>& vec) {
+    for (auto i : vec)
+        os << i << " ";
+    os << endl;
 }
 
 int main() {
     ofstream answer("answer.txt");
     ifstream file("data.txt");
+    Symbols syms;
     Patterns p;
-    read_file(file, p);
+    read_file(file, syms, p);
     Trie trie(p);
-    trie.print_trie(answer);
-
+    auto vec = trie.matching(syms);
+    print_vector(answer, vec);
     return 0;
 }
