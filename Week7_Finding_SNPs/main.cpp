@@ -3,6 +3,8 @@
 #include <string>
 #include <map>
 #include <fstream>
+#include <algorithm>
+#include <cstring>
 
 using namespace std;
 typedef char Symbol;
@@ -213,9 +215,6 @@ class SuffixTree {
     }
 
     void set_suffix_index_by_DFS(Node* n, int labelHeight) {
-        if (n == nullptr)
-            return;
-
         bool leaf = true;
 
         for (auto child : n->children) {
@@ -246,9 +245,6 @@ class SuffixTree {
     }
 
     void print_tree_by_DFS(Node* n, ofstream& os) {
-        if (n == nullptr)
-            return;
-
         if (n->start != -1)
             print(n->start, *(n->end), os);
 
@@ -259,8 +255,6 @@ class SuffixTree {
     enum NodeType { LEAF = 0, INTERNAL = -1, X_NODE = -2, Y_NODE = -3, XY_NODE = -4 };
 
     void find_deepest_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex) {
-        if (&n == nullptr)
-            return;
         if (n.suffixIndex == INTERNAL)
             for (auto child : n.children)
                 find_deepest_interal_node(*child.second, labelHeight + child.second->get_edge_length(), maxHeight, substringStartIndex);
@@ -271,8 +265,6 @@ class SuffixTree {
     }
 
     int find_deepest_common_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex, int sizeFirstString) {
-        if (&n == nullptr)
-            return LEAF;
         int nodeType;
         if (n.suffixIndex < LEAF)
             for (auto child : n.children) {
@@ -301,8 +293,6 @@ class SuffixTree {
     }
 
     void find_highest_non_shared_interal_node(Node& n, int labelHeight, int& minHeight, int& substringStartIndex, int sizeFirstString) {
-        if (&n == nullptr)
-            return;
         if (n.suffixIndex == INTERNAL) {
             for (auto child : n.children)
                 if (child.first != SPECIAL_SYMBOLS[0] && child.first != SPECIAL_SYMBOLS[1])
@@ -364,19 +354,53 @@ class SuffixTree {
 };
 SuffixTree::Node* SuffixTree::root = nullptr;
 
+class SuffixArray {
+    struct Suffix {
+        int index;
+        char* value;
+        Suffix(int i, char* s) : index(i), value(s) {
+        }
+        bool operator<(const Suffix& other) const {
+            return strcmp(value, other.value) < 0;
+        }
+    };
+
+    public:
+    SuffixArray(string s) {
+        char* array = const_cast<char*>(s.c_str());
+        build_suffix_array(array, s.length());
+    }
+
+    vector<int> get_all_indecies() const {
+        vector<int> indecies;
+        for (auto suff : suffixes)
+            indecies.push_back(suff.index);
+        return indecies;
+    }
+
+    private:
+    vector<Suffix> suffixes;
+
+    void build_suffix_array(char* text, size_t len) {
+        for (size_t i = 0; i < len; ++i) {
+            suffixes.emplace_back(i, (text + i));
+        }
+        sort(suffixes.begin(), suffixes.end());
+    }
+};
 
 void read_file(ifstream& file, Symbols& s, int& sizeFirstString) {
-    string str;
+    //  string str;
     file >> s;
-    sizeFirstString = s.size();
-    file >> str;
-    s += SPECIAL_SYMBOLS[0] + str + SPECIAL_SYMBOLS[1];
+    //    sizeFirstString = s.size();
+    //    file >> str;
+    //    s += SPECIAL_SYMBOLS[0] + str + SPECIAL_SYMBOLS[1];
     //    while (file >> str)
     //       p.push_back(str);
 }
-void print_vector(ofstream& os, vector<int>& vec) {
+void print_vector(ofstream& os, const vector<int>& vec) {
     for (auto i : vec)
-        os << i << " ";
+        os << i << ", ";
     os << endl;
 }
 
@@ -386,7 +410,8 @@ int main() {
     Symbols syms;
     int sizeFirstString = 0;
     read_file(file, syms, sizeFirstString);
-    SuffixTree tree(syms);
-    answer << tree.shortest_non_shared_substring(sizeFirstString) << endl;
+
+    SuffixArray array(syms);
+    print_vector(answer, array.get_all_indecies());
     return 0;
 }
