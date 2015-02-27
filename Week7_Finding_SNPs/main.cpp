@@ -266,6 +266,39 @@ class SuffixTree {
         }
     }
 
+    enum NodeType { END = 0, INTERNAL = -1, X_NODE = -2, Y_NODE = -3, XY_NODE = -4 };
+
+    int find_deepest_common_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex, int sizeFirstString) {
+        if (&n == nullptr)
+            return END;
+        int nodeType;
+        if (n.suffixIndex < END)
+            for (auto child : n.children) {
+                nodeType = find_deepest_common_interal_node(*child.second,
+                                                            labelHeight + child.second->get_edge_length(),
+                                                            maxHeight,
+                                                            substringStartIndex,
+                                                            sizeFirstString);
+
+                if (n.suffixIndex == INTERNAL)
+                    n.suffixIndex = nodeType;
+                else if ((n.suffixIndex == X_NODE && nodeType == Y_NODE) ||
+                         (n.suffixIndex == Y_NODE && nodeType == X_NODE) || n.suffixIndex == XY_NODE) {
+                    n.suffixIndex = XY_NODE;
+                    if (maxHeight < labelHeight) {
+                        maxHeight = labelHeight;
+                        substringStartIndex = *n.end - labelHeight + 1;
+                    }
+                }
+            }
+        else if (n.suffixIndex > INTERNAL && n.suffixIndex < sizeFirstString)
+            return X_NODE;
+        else if (n.suffixIndex >= sizeFirstString)
+            return Y_NODE;
+        return n.suffixIndex;
+    }
+
+
     public:
     SuffixTree(string str)
     : text(std::move(str)), activeNode(nullptr), activeEdge(-1), activeLength(0), leafEnd(-1), rootEnd(nullptr),
@@ -279,6 +312,14 @@ class SuffixTree {
         print_tree_by_DFS(root, os);
     }
 
+    string longest_common_substring(int sizeFirstString) {
+        int maxHeight = 0;
+        int substringStartIndex = 0;
+        find_deepest_common_interal_node(*root, 0, maxHeight, substringStartIndex, sizeFirstString);
+        if (maxHeight == 0)
+            return "";
+        return text.substr(substringStartIndex, maxHeight);
+    }
     string longest_repeated_substring() {
         int maxHeight = 0;
         int substringStartIndex = 0;
@@ -295,9 +336,12 @@ class SuffixTree {
 SuffixTree::Node* SuffixTree::root = nullptr;
 
 
-void read_file(ifstream& file, Symbols& s, Patterns& p) {
+void read_file(ifstream& file, Symbols& s, int& sizeFirstString) {
     string str;
     file >> s;
+    sizeFirstString = s.size();
+    file >> str;
+    s += "#" + str + "$";
     //    while (file >> str)
     //       p.push_back(str);
 }
@@ -311,10 +355,10 @@ int main() {
     ofstream answer("answer.txt");
     ifstream file("data.txt");
     Symbols syms;
-    Patterns p;
-    read_file(file, syms, p);
+    int sizeFirstString = 0;
+    read_file(file, syms, sizeFirstString);
     SuffixTree tree(syms);
     // tree.print_tree(answer);
-    answer << tree.longest_repeated_substring() << endl;
+    answer << tree.longest_common_substring(sizeFirstString) << endl;
     return 0;
 }
