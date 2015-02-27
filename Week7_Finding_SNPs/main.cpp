@@ -8,6 +8,7 @@ using namespace std;
 typedef char Symbol;
 typedef string Symbols;
 typedef vector<string> Patterns;
+const Symbol SPECIAL_SYMBOLS[] = {'#', '$'};
 
 class Trie {
     private:
@@ -243,6 +244,7 @@ class SuffixTree {
             os << text[k];
         os << endl;
     }
+
     void print_tree_by_DFS(Node* n, ofstream& os) {
         if (n == nullptr)
             return;
@@ -254,25 +256,25 @@ class SuffixTree {
             print_tree_by_DFS(child.second, os);
     }
 
+    enum NodeType { LEAF = 0, INTERNAL = -1, X_NODE = -2, Y_NODE = -3, XY_NODE = -4 };
+
     void find_deepest_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex) {
         if (&n == nullptr)
             return;
-        if (n.suffixIndex == -1)
+        if (n.suffixIndex == INTERNAL)
             for (auto child : n.children)
                 find_deepest_interal_node(*child.second, labelHeight + child.second->get_edge_length(), maxHeight, substringStartIndex);
-        else if (n.suffixIndex > -1 && maxHeight < labelHeight - n.get_edge_length()) {
+        else if (n.suffixIndex > INTERNAL && maxHeight < labelHeight - n.get_edge_length()) {
             maxHeight = labelHeight - n.get_edge_length();
             substringStartIndex = n.suffixIndex;
         }
     }
 
-    enum NodeType { END = 0, INTERNAL = -1, X_NODE = -2, Y_NODE = -3, XY_NODE = -4 };
-
     int find_deepest_common_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex, int sizeFirstString) {
         if (&n == nullptr)
-            return END;
+            return LEAF;
         int nodeType;
-        if (n.suffixIndex < END)
+        if (n.suffixIndex < LEAF)
             for (auto child : n.children) {
                 nodeType = find_deepest_common_interal_node(*child.second,
                                                             labelHeight + child.second->get_edge_length(),
@@ -298,6 +300,22 @@ class SuffixTree {
         return n.suffixIndex;
     }
 
+    void find_highest_non_shared_interal_node(Node& n, int labelHeight, int& minHeight, int& substringStartIndex, int sizeFirstString) {
+        if (&n == nullptr)
+            return;
+        if (n.suffixIndex == INTERNAL) {
+            for (auto child : n.children)
+                if (child.first != SPECIAL_SYMBOLS[0] && child.first != SPECIAL_SYMBOLS[1])
+                    find_highest_non_shared_interal_node(*child.second,
+                                                         labelHeight + child.second->get_edge_length(),
+                                                         minHeight,
+                                                         substringStartIndex,
+                                                         sizeFirstString);
+        } else if (minHeight > labelHeight - n.get_edge_length()) {
+            minHeight = labelHeight - n.get_edge_length() + 1;
+            substringStartIndex = n.suffixIndex;
+        }
+    }
 
     public:
     SuffixTree(string str)
@@ -312,22 +330,33 @@ class SuffixTree {
         print_tree_by_DFS(root, os);
     }
 
-    string longest_common_substring(int sizeFirstString) {
-        int maxHeight = 0;
-        int substringStartIndex = 0;
-        find_deepest_common_interal_node(*root, 0, maxHeight, substringStartIndex, sizeFirstString);
-        if (maxHeight == 0)
-            return "";
-        return text.substr(substringStartIndex, maxHeight);
-    }
     string longest_repeated_substring() {
         int maxHeight = 0;
-        int substringStartIndex = 0;
-        find_deepest_interal_node(*root, 0, maxHeight, substringStartIndex);
+        int startIndex = 0;
+        find_deepest_interal_node(*root, 0, maxHeight, startIndex);
         if (maxHeight == 0)
             return "";
-        return text.substr(substringStartIndex, maxHeight);
+        return text.substr(startIndex, maxHeight);
     }
+
+    string longest_common_substring(int sizeFirstString) {
+        int maxHeight = 0;
+        int startIndex = 0;
+        find_deepest_common_interal_node(*root, 0, maxHeight, startIndex, sizeFirstString);
+        if (maxHeight == 0)
+            return "";
+        return text.substr(startIndex, maxHeight);
+    }
+
+    string shortest_non_shared_substring(int sizeFirstString) {
+        int minHeight = sizeFirstString;
+        int startIndex = 0;
+        find_highest_non_shared_interal_node(*root, 0, minHeight, startIndex, sizeFirstString);
+        if (minHeight == 0)
+            return "";
+        return text.substr(startIndex, minHeight);
+    }
+
 
     ~SuffixTree() {
         delete root;
@@ -341,7 +370,7 @@ void read_file(ifstream& file, Symbols& s, int& sizeFirstString) {
     file >> s;
     sizeFirstString = s.size();
     file >> str;
-    s += "#" + str + "$";
+    s += SPECIAL_SYMBOLS[0] + str + SPECIAL_SYMBOLS[1];
     //    while (file >> str)
     //       p.push_back(str);
 }
@@ -358,7 +387,6 @@ int main() {
     int sizeFirstString = 0;
     read_file(file, syms, sizeFirstString);
     SuffixTree tree(syms);
-    // tree.print_tree(answer);
-    answer << tree.longest_common_substring(sizeFirstString) << endl;
+    answer << tree.shortest_non_shared_substring(sizeFirstString) << endl;
     return 0;
 }
