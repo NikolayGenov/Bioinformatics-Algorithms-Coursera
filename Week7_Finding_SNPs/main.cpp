@@ -254,6 +254,18 @@ class SuffixTree {
             print_tree_by_DFS(child.second, os);
     }
 
+    void find_deepest_interal_node(Node& n, int labelHeight, int& maxHeight, int& substringStartIndex) {
+        if (&n == nullptr)
+            return;
+        if (n.suffixIndex == -1)
+            for (auto child : n.children)
+                find_deepest_interal_node(*child.second, labelHeight + child.second->get_edge_length(), maxHeight, substringStartIndex);
+        else if (n.suffixIndex > -1 && maxHeight < labelHeight - n.get_edge_length()) {
+            maxHeight = labelHeight - n.get_edge_length();
+            substringStartIndex = n.suffixIndex;
+        }
+    }
+
     public:
     SuffixTree(string str)
     : text(std::move(str)), activeNode(nullptr), activeEdge(-1), activeLength(0), leafEnd(-1), rootEnd(nullptr),
@@ -265,6 +277,15 @@ class SuffixTree {
 
     void print_tree(ofstream& os) {
         print_tree_by_DFS(root, os);
+    }
+
+    string longest_repeated_substring() {
+        int maxHeight = 0;
+        int substringStartIndex = 0;
+        find_deepest_interal_node(*root, 0, maxHeight, substringStartIndex);
+        if (maxHeight == 0)
+            return "";
+        return text.substr(substringStartIndex, maxHeight);
     }
 
     ~SuffixTree() {
@@ -293,6 +314,7 @@ int main() {
     Patterns p;
     read_file(file, syms, p);
     SuffixTree tree(syms);
-    tree.print_tree(answer);
+    // tree.print_tree(answer);
+    answer << tree.longest_repeated_substring() << endl;
     return 0;
 }
