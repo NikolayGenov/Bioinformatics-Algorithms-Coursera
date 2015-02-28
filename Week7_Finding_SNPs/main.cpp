@@ -407,6 +407,24 @@ class BurrowsWheelerTransformation {
         return transformed;
     }
 
+    int count_runs(int min_length) {
+        int runs = 0;
+        int counter = 1;
+        bool new_word = false;
+        for (size_t i = 0; i < length - 1; ++i)
+            if (transformed[i] == transformed[i + 1]) {
+                ++counter;
+                if (counter >= min_length && new_word) {
+                    ++runs;
+                    new_word = false;
+                }
+            } else {
+                new_word = true;
+                counter = 1;
+            }
+        return runs;
+    }
+
     private:
     size_t length;
     string text;
@@ -446,6 +464,6 @@ int main() {
     read_file(file, syms, sizeFirstString);
 
     BurrowsWheelerTransformation trans(syms);
-    answer << trans.get_transform() << endl;
+    cout << trans.count_runs(10) << endl;
     return 0;
 }
