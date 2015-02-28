@@ -10,7 +10,7 @@ using namespace std;
 typedef char Symbol;
 typedef string Symbols;
 typedef vector<string> Patterns;
-const Symbol SPECIAL_SYMBOLS[] = {'#', '$'};
+const Symbol SPECIAL_SYMBOLS[] = {'$', '#'};
 
 class Trie {
     private:
@@ -407,6 +407,10 @@ class BurrowsWheelerTransformation {
         return transformed;
     }
 
+    static string get_inverse_tranformation(const string& s) {
+        return inverse_transform(s);
+    }
+
     int count_runs(int min_length) {
         int runs = 0;
         int counter = 1;
@@ -439,6 +443,44 @@ class BurrowsWheelerTransformation {
             return text[a] < text[b];
         });
     }
+
+    struct OccurPair {
+        int index;
+        char ch;
+        OccurPair(char c, int i) : index(i), ch(c) {
+        }
+        bool operator==(const OccurPair& other) const {
+            return ch == other.ch && index == other.index;
+        }
+        bool operator<(const OccurPair& other) const {
+            return ch < other.ch || (ch == other.ch && index < other.index);
+        }
+    };
+
+    static string inverse_transform(const string& transformed) {
+        string lexOrdered = transformed;
+        string original;
+        map<char, int> symbolsCount;
+        vector<OccurPair> transformedPairs, lexOrderedPairs;
+
+        sort(lexOrdered.begin(), lexOrdered.end());
+
+        for (size_t i = 0; i < transformed.size(); ++i)
+            transformedPairs.emplace_back(transformed[i], symbolsCount[transformed[i]]++);
+
+        symbolsCount.clear();
+
+        for (size_t i = 0; i < transformed.size(); ++i)
+            lexOrderedPairs.emplace_back(lexOrdered[i], symbolsCount[lexOrdered[i]]++);
+
+        OccurPair p{SPECIAL_SYMBOLS[0], 0};
+        for (size_t i = 0; i < transformed.size(); ++i) {
+            auto pos = find(transformedPairs.begin(), transformedPairs.end(), p) - transformedPairs.begin();
+            p = lexOrderedPairs[pos];
+            original.push_back(p.ch);
+        }
+        return original;
+    }
 };
 
 void read_file(ifstream& file, Symbols& s, int& sizeFirstString) {
@@ -463,7 +505,6 @@ int main() {
     int sizeFirstString = 0;
     read_file(file, syms, sizeFirstString);
 
-    BurrowsWheelerTransformation trans(syms);
-    cout << trans.count_runs(10) << endl;
+    answer << BurrowsWheelerTransformation::get_inverse_tranformation(syms) << endl;
     return 0;
 }
