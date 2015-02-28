@@ -371,11 +371,11 @@ class SuffixArray {
         build_suffix_array(array, s.length());
     }
 
-    vector<int> get_all_indecies() const {
-        vector<int> indecies;
+    vector<int> get_all_indices() const {
+        vector<int> indices;
         for (auto suff : suffixes)
-            indecies.push_back(suff.index);
-        return indecies;
+            indices.push_back(suff.index);
+        return indices;
     }
 
     private:
@@ -386,6 +386,40 @@ class SuffixArray {
             suffixes.emplace_back(i, (text + i));
         }
         sort(suffixes.begin(), suffixes.end());
+    }
+};
+
+class BurrowsWheelerTransformation {
+
+    public:
+    BurrowsWheelerTransformation(string s) : text(std::move(s)) {
+        length = text.length();
+        for (size_t i = 0; i < length; ++i)
+            indices.push_back(i);
+
+        sort_indices();
+
+        for (size_t i = 0; i < length; ++i)
+            transformed.push_back(text[(indices[i] + length - 1) % length]);
+    }
+
+    string get_transform() {
+        return transformed;
+    }
+
+    private:
+    size_t length;
+    string text;
+    vector<int> indices;
+    string transformed = "";
+
+    void sort_indices() {
+        sort(indices.begin(), indices.end(), [this](int a, int b) {
+            for (size_t i = 0; i < length; ++i)
+                if (text[(a + i) % length] != text[(b + i) % length])
+                    return text[(a + i) % length] < text[(b + i) % length];
+            return text[a] < text[b];
+        });
     }
 };
 
@@ -411,7 +445,7 @@ int main() {
     int sizeFirstString = 0;
     read_file(file, syms, sizeFirstString);
 
-    SuffixArray array(syms);
-    print_vector(answer, array.get_all_indecies());
+    BurrowsWheelerTransformation trans(syms);
+    answer << trans.get_transform() << endl;
     return 0;
 }
