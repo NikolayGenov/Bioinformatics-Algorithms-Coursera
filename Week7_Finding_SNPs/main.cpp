@@ -12,6 +12,29 @@ typedef string Symbols;
 typedef vector<string> Patterns;
 const Symbol SPECIAL_SYMBOLS[] = {'$', '#'};
 
+void sort_indices_by_lex_order(vector<int>& indices, const string& text) {
+    size_t length = text.size();
+    sort(indices.begin(), indices.end(), [length, text](int a, int b) {
+        for (size_t i = 0; i < length; ++i)
+            if (text[(a + i) % length] != text[(b + i) % length])
+                return text[(a + i) % length] < text[(b + i) % length];
+        return text[a] < text[b];
+    });
+}
+
+struct OccurPair {
+    int index;
+    char ch;
+    OccurPair(char c, int i) : index(i), ch(c) {
+    }
+    bool operator==(const OccurPair& other) const {
+        return ch == other.ch && index == other.index;
+    }
+    bool operator<(const OccurPair& other) const {
+        return ch < other.ch || (ch == other.ch && index < other.index);
+    }
+};
+
 class Trie {
     private:
     struct Node {
@@ -397,7 +420,7 @@ class BurrowsWheelerTransformation {
         for (size_t i = 0; i < length; ++i)
             indices.push_back(i);
 
-        sort_indices();
+        sort_indices_by_lex_order(indices, text);
 
         for (size_t i = 0; i < length; ++i)
             transformed.push_back(text[(indices[i] + length - 1) % length]);
@@ -435,28 +458,6 @@ class BurrowsWheelerTransformation {
     vector<int> indices;
     string transformed = "";
 
-    void sort_indices() {
-        sort(indices.begin(), indices.end(), [this](int a, int b) {
-            for (size_t i = 0; i < length; ++i)
-                if (text[(a + i) % length] != text[(b + i) % length])
-                    return text[(a + i) % length] < text[(b + i) % length];
-            return text[a] < text[b];
-        });
-    }
-
-    struct OccurPair {
-        int index;
-        char ch;
-        OccurPair(char c, int i) : index(i), ch(c) {
-        }
-        bool operator==(const OccurPair& other) const {
-            return ch == other.ch && index == other.index;
-        }
-        bool operator<(const OccurPair& other) const {
-            return ch < other.ch || (ch == other.ch && index < other.index);
-        }
-    };
-
     static string inverse_transform(const string& transformed) {
         string lexOrdered = transformed;
         string original;
@@ -465,16 +466,16 @@ class BurrowsWheelerTransformation {
 
         sort(lexOrdered.begin(), lexOrdered.end());
 
-        for (size_t i = 0; i < transformed.size(); ++i)
-            transformedPairs.emplace_back(transformed[i], symbolsCount[transformed[i]]++);
+        for (auto& elem : transformed)
+            transformedPairs.emplace_back(elem, symbolsCount[elem]++);
 
         symbolsCount.clear();
 
-        for (size_t i = 0; i < transformed.size(); ++i)
-            lexOrderedPairs.emplace_back(lexOrdered[i], symbolsCount[lexOrdered[i]]++);
+        for (auto& elem : lexOrdered)
+            lexOrderedPairs.emplace_back(elem, symbolsCount[elem]++);
 
         OccurPair p{SPECIAL_SYMBOLS[0], 0};
-        for (size_t i = 0; i < transformed.size(); ++i) {
+        for (auto& elem : transformed) {
             auto pos = find(transformedPairs.begin(), transformedPairs.end(), p) - transformedPairs.begin();
             p = lexOrderedPairs[pos];
             original.push_back(p.ch);
@@ -483,28 +484,84 @@ class BurrowsWheelerTransformation {
     }
 };
 
-void read_file(ifstream& file, Symbols& s, int& sizeFirstString) {
-    //  string str;
+
+vector<int> build_last_first_index(const string& first, const string& last) {
+    map<char, int> symbolsCount;
+    vector<OccurPair> firstPairs, lastPairs;
+
+    for (auto& elem : last)
+        lastPairs.emplace_back(elem, symbolsCount[elem]++);
+
+    symbolsCount.clear();
+    for (auto& elem : first)
+        firstPairs.emplace_back(elem, symbolsCount[elem]++);
+
+    vector<int> index;
+    for (auto& lastPair : lastPairs) {
+        auto pos = find(firstPairs.begin(), firstPairs.end(), lastPair) - firstPairs.begin();
+        index.push_back(pos);
+    }
+
+    return index;
+}
+
+vector<int> BWMatching(string lastColumn, Patterns patterns) {
+    string firstColumn = lastColumn;
+    sort(firstColumn.begin(), firstColumn.end());
+
+    vector<int> indices = build_last_first_index(firstColumn, lastColumn);
+    vector<int> numberOccurrences;
+
+    for (auto pattern : patterns) {
+        size_t top = 0;
+        auto bottom = lastColumn.size() - 1;
+        auto revIt = pattern.rbegin();
+        auto revEndIt = pattern.rend();
+        while (top <= bottom) {
+            if (revIt != revEndIt) {
+                Symbol sym = *revIt++;
+                auto begin = lastColumn.begin();
+                auto beginTop = begin + top;
+                auto endBottom = begin + bottom + 1;
+                auto first = find(beginTop, endBottom, sym);
+                auto last = find_end(beginTop, endBottom, &sym, &sym + 1);
+                if (first != endBottom) {
+                    int topIndex = first - begin;
+                    int bottomIndex = last - begin;
+                    top = indices[topIndex];
+                    bottom = indices[bottomIndex];
+                } else {
+                    numberOccurrences.push_back(0);
+                    break;
+                }
+            } else {
+                numberOccurrences.push_back(bottom - top + 1);
+                break;
+            }
+        }
+    }
+    return numberOccurrences;
+}
+
+void read_file(ifstream& file, Symbols& s, Patterns& p) {
+    string str;
     file >> s;
-    //    sizeFirstString = s.size();
-    //    file >> str;
-    //    s += SPECIAL_SYMBOLS[0] + str + SPECIAL_SYMBOLS[1];
-    //    while (file >> str)
-    //       p.push_back(str);
+    while (file >> str)
+        p.push_back(str);
 }
 void print_vector(ofstream& os, const vector<int>& vec) {
     for (auto i : vec)
-        os << i << ", ";
+        os << i << " ";
     os << endl;
 }
 
 int main() {
     ofstream answer("answer.txt");
     ifstream file("data.txt");
-    Symbols syms;
-    int sizeFirstString = 0;
-    read_file(file, syms, sizeFirstString);
+    string BWTstr;
+    Patterns patterns;
+    read_file(file, BWTstr, patterns);
 
-    answer << BurrowsWheelerTransformation::get_inverse_tranformation(syms) << endl;
+    print_vector(answer, BWMatching(BWTstr, patterns));
     return 0;
 }
