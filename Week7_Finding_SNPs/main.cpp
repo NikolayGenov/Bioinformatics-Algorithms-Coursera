@@ -505,6 +505,40 @@ vector<int> build_last_first_index(const string& first, const string& last) {
     return index;
 }
 
+
+map<Symbol, int> build_first_occurrence_index(const string& last) {
+    const int NUMBER_OF_DIFFERENT_SYMBOLS = 5; // Only for A C G T - need the last
+    string first = last;
+    sort(first.begin(), first.end());
+    map<Symbol, int> index;
+    index[first[0]] = 0;
+    for (size_t i = 1; i < first.size(); ++i)
+        if (first[i - 1] != first[i]) {
+            index[first[i]] = i;
+            if (index.size() == NUMBER_OF_DIFFERENT_SYMBOLS - 1)
+                index[first[i + 1]] = i + 1;
+        }
+    return index;
+}
+
+map<Symbol, vector<int>> build_count_symbols_matrix(const string& last) {
+    const vector<Symbol> syms = {'$', 'A', 'C', 'G', 'T'};
+    map<Symbol, vector<int>> index;
+
+    for (auto& sym : syms)
+        index[sym] = {0};
+
+    for (size_t i = 0; i < last.size(); ++i) {
+        for (auto& sym : syms) {
+            int val = index[sym][i];
+            if (sym == last[i])
+                val += 1;
+            index[sym].push_back(val);
+        }
+    }
+    return index;
+}
+
 vector<int> BWMatching(string lastColumn, Patterns patterns) {
     string firstColumn = lastColumn;
     sort(firstColumn.begin(), firstColumn.end());
@@ -543,6 +577,38 @@ vector<int> BWMatching(string lastColumn, Patterns patterns) {
     return numberOccurrences;
 }
 
+vector<int> better_BW_matching(string lastColumn, Patterns patterns) {
+    auto firstOccurrence = build_first_occurrence_index(lastColumn);
+    auto count_symbols_matrix = build_count_symbols_matrix(lastColumn);
+    vector<int> numberOccurrences;
+
+    for (auto pattern : patterns) {
+        size_t top = 0;
+        auto bottom = lastColumn.size() - 1;
+        auto revIt = pattern.rbegin();
+        auto revEndIt = pattern.rend();
+        while (top <= bottom) {
+            if (revIt != revEndIt) {
+                Symbol sym = *revIt++;
+                auto begin = lastColumn.begin();
+                // if positions from top to bottom in LastColumn contain an occurrence of symbol
+                if (find(begin + top, begin + bottom + 1, sym) != begin + bottom + 1) {
+                    top = firstOccurrence[sym] + count_symbols_matrix[sym][top];
+                    bottom = firstOccurrence[sym] + count_symbols_matrix[sym][bottom + 1] - 1;
+                } else {
+                    numberOccurrences.push_back(0);
+                    break;
+                }
+            } else {
+                numberOccurrences.push_back(bottom - top + 1);
+                break;
+            }
+        }
+    }
+    return numberOccurrences;
+}
+
+
 void read_file(ifstream& file, Symbols& s, Patterns& p) {
     string str;
     file >> s;
@@ -562,6 +628,6 @@ int main() {
     Patterns patterns;
     read_file(file, BWTstr, patterns);
 
-    print_vector(answer, BWMatching(BWTstr, patterns));
+    print_vector(answer, better_BW_matching(BWTstr, patterns));
     return 0;
 }
