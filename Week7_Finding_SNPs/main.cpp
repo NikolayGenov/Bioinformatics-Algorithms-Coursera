@@ -556,7 +556,27 @@ map<Symbol, int> build_first_occurrence_index(string last) {
         if (index[last[i]] == 0)
             index[last[i]] = i;
 
+    return index;
+}
 
+map<Symbol, vector<int>> build_checkout_symbols_index(const string& last, const vector<Symbol>& syms, int checkpointSize) {
+    map<Symbol, vector<int>> index;
+    map<Symbol, int> lastRow;
+
+    for (Symbol sym : syms)
+        lastRow[sym] = 0;
+
+
+    for (size_t i = 0; i < last.size(); ++i)
+        for (auto sym : syms) {
+            int& value = lastRow[sym];
+
+            if (i % checkpointSize == 0)
+                index[sym].push_back(value);
+
+            if (sym == last[i])
+                value++;
+        }
     return index;
 }
 
@@ -651,10 +671,88 @@ vector<int> better_BW_matching(string last, Patterns patterns) {
     return numberOccurrences;
 }
 
+int get_position_checkopoint(const string& last, Symbol s, map<Symbol, vector<int>>& index, int top, int checkpointSize) {
+    int nearestCheckpoint = (top - 1) / checkpointSize;
+    int start = nearestCheckpoint * checkpointSize;
+    int count = 0;
+    for (int i = start; i < top; ++i)
+        if (last[i] == s)
+            count++;
+    return count + index[s][nearestCheckpoint];
+}
+
+void add_indices_with_partial_array(vector<int>& indices,
+                                    const string last,
+                                    map<Symbol, vector<int>>& index,
+                                    const vector<pair<int, int>>& partialArray,
+                                    map<Symbol, int>& first,
+                                    int top,
+                                    int bottom,
+                                    int checkpointSize) {
+    for (int i = top; i < bottom; ++i) {
+        int count = 0;
+        int pos = i;
+        auto it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> i) { return i.first == pos; });
+        while (it == partialArray.end()) {
+            Symbol s = last[pos];
+            pos = first[s] + get_position_checkopoint(last, s, index, pos, checkpointSize);
+            count++;
+            it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> i) { return i.first == pos; });
+        }
+        int index = it->second + count;
+        indices.push_back(index);
+    }
+}
+
+vector<int> efficient_index_BW_matching(string last, Patterns patterns, const vector<pair<int, int>>& suffArray, int checkpointSize) {
+    auto firstIndex = build_first_occurrence_index(last);
+
+    vector<Symbol> syms;
+    for (auto pair : firstIndex)
+        syms.push_back(pair.first);
+    auto checkIndex = build_checkout_symbols_index(last, syms, checkpointSize);
+
+    auto startColumn = last.begin();
+
+    vector<int> indices;
+    for (auto pattern : patterns) {
+        auto top = (size_t)0;
+        auto bottom = last.size() - 1;
+        auto rBegIt = pattern.rbegin();
+        auto rEndIt = pattern.rend();
+        while (top <= bottom) {
+            if (rBegIt != rEndIt) {
+                Symbol s = *rBegIt++;
+                auto firstOc = startColumn + top;
+                auto endOc = startColumn + bottom + 1;
+                if (find(firstOc, endOc, s) != endOc) {
+                    top = firstIndex[s] + get_position_checkopoint(last, s, checkIndex, top, checkpointSize);
+                    bottom = firstIndex[s] + get_position_checkopoint(last, s, checkIndex, bottom + 1, checkpointSize) - 1;
+                } else {
+                    break;
+                }
+            } else {
+                add_indices_with_partial_array(indices, last, checkIndex, suffArray, firstIndex, top, bottom + 1, checkpointSize);
+                break;
+            }
+        }
+    }
+    return indices;
+}
+
+vector<int> find_substring_pos_with_BWT(const string& str, const Patterns& patterns, int checkpointSize) {
+    BurrowsWheelerTransformation trans(str);
+    SuffixArray array(str);
+    auto BWT = trans.get_transform();
+    auto partialSuffixArray = array.get_k_suffix_array(checkpointSize);
+    auto indices = efficient_index_BW_matching(BWT, patterns, partialSuffixArray, checkpointSize);
+    return indices;
+}
+
 void read_file(ifstream& file, Symbols& s, Patterns& p) {
     string str;
     file >> s;
-
+    s += "$";
     while (file >> str)
         p.push_back(str);
 }
@@ -671,7 +769,9 @@ int main() {
     Patterns p;
     read_file(file, str, p);
 
-    SuffixArray arr(str);
-    print_vector(answer, better_BW_matching(str, p));
+    const int CHECKPOINT_ARRAY_SIZE_CONST = 5;
+    auto vec = find_substring_pos_with_BWT(str, p, CHECKPOINT_ARRAY_SIZE_CONST);
+    sort(vec.begin(), vec.end());
+    print_vector(answer, vec);
     return 0;
 }
