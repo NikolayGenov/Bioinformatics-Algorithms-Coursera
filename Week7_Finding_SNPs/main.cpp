@@ -377,38 +377,82 @@ class SuffixTree {
 };
 SuffixTree::Node* SuffixTree::root = nullptr;
 
+// Taken and a bit modified from the version here:
+// http://www.geeksforgeeks.org/suffix-array-set-2-a-nlognlogn-algorithm/
 class SuffixArray {
-    struct Suffix {
-        int index;
-        char* value;
-        Suffix(int i, char* s) : index(i), value(s) {
-        }
-        bool operator<(const Suffix& other) const {
-            return strcmp(value, other.value) < 0;
-        }
-    };
 
     public:
-    SuffixArray(string s) {
-        char* array = const_cast<char*>(s.c_str());
-        build_suffix_array(array, s.length());
+    SuffixArray(const string& s) {
+        buildSuffixArray(s);
     }
 
-    vector<int> get_all_indices() const {
-        vector<int> indices;
-        for (auto suff : suffixes)
-            indices.push_back(suff.index);
-        return indices;
+    vector<int> get_suffix_array() {
+        return array;
+    }
+
+    vector<pair<int, int>> get_k_suffix_array(int k) {
+        vector<pair<int, int>> k_array;
+        for (size_t i = 0; i < array.size(); ++i)
+            if (array[i] % k == 0)
+                k_array.push_back(make_pair(i, array[i]));
+        return k_array;
     }
 
     private:
-    vector<Suffix> suffixes;
+    vector<int> array;
 
-    void build_suffix_array(char* text, size_t len) {
-        for (size_t i = 0; i < len; ++i) {
-            suffixes.emplace_back(i, (text + i));
+    struct suffix {
+        int index;
+        int rank[2];
+    };
+
+    bool cmp(struct suffix a, struct suffix b) const {
+        return (a.rank[0] == b.rank[0]) ? (a.rank[1] < b.rank[1] ? true : false) : (a.rank[0] < b.rank[0] ? true : false);
+    }
+
+    void buildSuffixArray(const string& str) {
+        size_t length = str.size();
+        vector<suffix> suffixes(length);
+        const char FIRST_LETTER = 'A';
+
+        for (size_t i = 0; i < length; i++) {
+            suffixes[i].index = i;
+            suffixes[i].rank[0] = str[i] - FIRST_LETTER;
+            suffixes[i].rank[1] = ((i + 1) < length) ? (str[i + 1] - FIRST_LETTER) : -1;
         }
-        sort(suffixes.begin(), suffixes.end());
+
+        sort(suffixes.begin(), suffixes.end(), [this](suffix a, suffix b) { return cmp(a, b); });
+
+        vector<int> ind(length);
+        for (size_t k = 4; k < 2 * length; k = k * 2) {
+
+            int rank = 0;
+            int prev_rank = suffixes[0].rank[0];
+            suffixes[0].rank[0] = rank;
+            ind[suffixes[0].index] = 0;
+
+            for (size_t i = 1; i < length; i++) {
+                if (suffixes[i].rank[0] == prev_rank && suffixes[i].rank[1] == suffixes[i - 1].rank[1]) {
+                    prev_rank = suffixes[i].rank[0];
+                    suffixes[i].rank[0] = rank;
+                } else {
+                    prev_rank = suffixes[i].rank[0];
+                    suffixes[i].rank[0] = ++rank;
+                }
+                ind[suffixes[i].index] = i;
+            }
+
+            for (size_t i = 0; i < length; i++) {
+                size_t nextindex = suffixes[i].index + k / 2;
+                suffixes[i].rank[1] = (nextindex < length) ? suffixes[ind[nextindex]].rank[0] : -1;
+            }
+
+            sort(suffixes.begin(), suffixes.end(), [this](suffix a, suffix b) { return cmp(a, b); });
+        }
+
+        array.resize(length);
+        for (size_t i = 0; i < length; i++)
+            array[i] = suffixes[i].index;
     }
 };
 
@@ -505,37 +549,30 @@ vector<int> build_last_first_index(const string& first, const string& last) {
     return index;
 }
 
-
-map<Symbol, int> build_first_occurrence_index(const string& last) {
-    const int NUMBER_OF_DIFFERENT_SYMBOLS = 5; // Only for A C G T - need the last
-    string first = last;
-    sort(first.begin(), first.end());
+map<Symbol, int> build_first_occurrence_index(string last) {
+    sort(last.begin(), last.end());
     map<Symbol, int> index;
-    index[first[0]] = 0;
-    for (size_t i = 1; i < first.size(); ++i)
-        if (first[i - 1] != first[i]) {
-            index[first[i]] = i;
-            if (index.size() == NUMBER_OF_DIFFERENT_SYMBOLS - 1)
-                index[first[i + 1]] = i + 1;
-        }
+    for (size_t i = 0; i < last.size(); ++i)
+        if (index[last[i]] == 0)
+            index[last[i]] = i;
+
+
     return index;
 }
 
-map<Symbol, vector<int>> build_count_symbols_matrix(const string& last) {
-    const vector<Symbol> syms = {'$', 'A', 'C', 'G', 'T'};
+map<Symbol, vector<int>> build_count_symbols_matrix(const string& last, const vector<Symbol>& syms) {
     map<Symbol, vector<int>> index;
 
-    for (auto& sym : syms)
+    for (Symbol sym : syms)
         index[sym] = {0};
 
-    for (size_t i = 0; i < last.size(); ++i) {
-        for (auto& sym : syms) {
-            int val = index[sym][i];
+    for (size_t i = 0; i < last.size(); ++i)
+        for (auto sym : syms) {
+            int value = index[sym][i];
             if (sym == last[i])
-                val += 1;
-            index[sym].push_back(val);
+                value++;
+            index[sym].push_back(value);
         }
-    }
     return index;
 }
 
@@ -577,24 +614,30 @@ vector<int> BWMatching(string lastColumn, Patterns patterns) {
     return numberOccurrences;
 }
 
-vector<int> better_BW_matching(string lastColumn, Patterns patterns) {
-    auto firstOccurrence = build_first_occurrence_index(lastColumn);
-    auto count_symbols_matrix = build_count_symbols_matrix(lastColumn);
-    vector<int> numberOccurrences;
 
+vector<int> better_BW_matching(string last, Patterns patterns) {
+
+    auto firstOccurrence = build_first_occurrence_index(last);
+    vector<Symbol> syms;
+    for (auto pair : firstOccurrence)
+        syms.push_back(pair.first);
+    auto countSymbolsMatrix = build_count_symbols_matrix(last, syms);
+    auto startColumn = last.begin();
+
+    vector<int> numberOccurrences;
     for (auto pattern : patterns) {
-        size_t top = 0;
-        auto bottom = lastColumn.size() - 1;
-        auto revIt = pattern.rbegin();
-        auto revEndIt = pattern.rend();
+        auto top = (size_t)0;
+        auto bottom = last.size() - 1;
+        auto rBegIt = pattern.rbegin();
+        auto rEndIt = pattern.rend();
         while (top <= bottom) {
-            if (revIt != revEndIt) {
-                Symbol sym = *revIt++;
-                auto begin = lastColumn.begin();
-                // if positions from top to bottom in LastColumn contain an occurrence of symbol
-                if (find(begin + top, begin + bottom + 1, sym) != begin + bottom + 1) {
-                    top = firstOccurrence[sym] + count_symbols_matrix[sym][top];
-                    bottom = firstOccurrence[sym] + count_symbols_matrix[sym][bottom + 1] - 1;
+            if (rBegIt != rEndIt) {
+                Symbol s = *rBegIt++;
+                auto firstOc = startColumn + top;
+                auto endOc = startColumn + bottom + 1;
+                if (find(firstOc, endOc, s) != endOc) {
+                    top = firstOccurrence[s] + countSymbolsMatrix[s][top];
+                    bottom = firstOccurrence[s] + countSymbolsMatrix[s][bottom + 1] - 1;
                 } else {
                     numberOccurrences.push_back(0);
                     break;
@@ -608,10 +651,10 @@ vector<int> better_BW_matching(string lastColumn, Patterns patterns) {
     return numberOccurrences;
 }
 
-
 void read_file(ifstream& file, Symbols& s, Patterns& p) {
     string str;
     file >> s;
+
     while (file >> str)
         p.push_back(str);
 }
@@ -624,10 +667,11 @@ void print_vector(ofstream& os, const vector<int>& vec) {
 int main() {
     ofstream answer("answer.txt");
     ifstream file("data.txt");
-    string BWTstr;
-    Patterns patterns;
-    read_file(file, BWTstr, patterns);
+    string str;
+    Patterns p;
+    read_file(file, str, p);
 
-    print_vector(answer, better_BW_matching(BWTstr, patterns));
+    SuffixArray arr(str);
+    print_vector(answer, better_BW_matching(str, p));
     return 0;
 }
