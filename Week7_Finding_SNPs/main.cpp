@@ -9,6 +9,7 @@
 using namespace std;
 typedef char Symbol;
 typedef string Symbols;
+typedef string Pattern;
 typedef vector<string> Patterns;
 const Symbol SPECIAL_SYMBOLS[] = {'$', '#'};
 
@@ -671,7 +672,7 @@ vector<int> better_BW_matching(string last, Patterns patterns) {
     return numberOccurrences;
 }
 
-int get_position_checkopoint(const string& last, Symbol s, map<Symbol, vector<int>>& index, int top, int checkpointSize) {
+int get_position_checkpoint(const string& last, Symbol s, map<Symbol, vector<int>>& index, int top, int checkpointSize) {
     int nearestCheckpoint = (top - 1) / checkpointSize;
     int start = nearestCheckpoint * checkpointSize;
     int count = 0;
@@ -686,57 +687,55 @@ void add_indices_with_partial_array(vector<int>& indices,
                                     map<Symbol, vector<int>>& index,
                                     const vector<pair<int, int>>& partialArray,
                                     map<Symbol, int>& first,
-                                    int top,
-                                    int bottom,
+                                    int i,
                                     int checkpointSize) {
-    for (int i = top; i < bottom; ++i) {
-        int count = 0;
-        int pos = i;
-        auto it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> i) { return i.first == pos; });
-        while (it == partialArray.end()) {
-            Symbol s = last[pos];
-            pos = first[s] + get_position_checkopoint(last, s, index, pos, checkpointSize);
-            count++;
-            it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> i) { return i.first == pos; });
-        }
-        int index = it->second + count;
-        indices.push_back(index);
+
+    int count = 0;
+    int pos = i;
+    auto it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> k) { return k.first == pos; });
+    while (it == partialArray.end()) {
+        Symbol s = last[pos];
+        pos = first[s] + get_position_checkpoint(last, s, index, pos, checkpointSize);
+        count++;
+        it = find_if(partialArray.begin(), partialArray.end(), [pos](pair<int, int> k) { return k.first == pos; });
     }
+    int index_pos = it->second + count;
+    indices.push_back(index_pos);
 }
 
-vector<int> efficient_index_BW_matching(string last, Patterns patterns, const vector<pair<int, int>>& suffArray, int checkpointSize) {
-    auto firstIndex = build_first_occurrence_index(last);
-
-    vector<Symbol> syms;
-    for (auto pair : firstIndex)
-        syms.push_back(pair.first);
-    auto checkIndex = build_checkout_symbols_index(last, syms, checkpointSize);
+vector<int> efficient_index_BW_matching(const string& last,
+                                        const Pattern& pattern,
+                                        map<Symbol, int>& firstIndex,
+                                        map<Symbol, vector<int>>& checkIndex,
+                                        const vector<pair<int, int>>& suffArray,
+                                        int checkpointSize,
+                                        size_t& top,
+                                        size_t& bottom) {
 
     auto startColumn = last.begin();
-
     vector<int> indices;
-    for (auto pattern : patterns) {
-        auto top = (size_t)0;
-        auto bottom = last.size() - 1;
-        auto rBegIt = pattern.rbegin();
-        auto rEndIt = pattern.rend();
-        while (top <= bottom) {
-            if (rBegIt != rEndIt) {
-                Symbol s = *rBegIt++;
-                auto firstOc = startColumn + top;
-                auto endOc = startColumn + bottom + 1;
-                if (find(firstOc, endOc, s) != endOc) {
-                    top = firstIndex[s] + get_position_checkopoint(last, s, checkIndex, top, checkpointSize);
-                    bottom = firstIndex[s] + get_position_checkopoint(last, s, checkIndex, bottom + 1, checkpointSize) - 1;
-                } else {
-                    break;
-                }
+
+    auto rBegIt = pattern.rbegin();
+    auto rEndIt = pattern.rend();
+
+    while (top <= bottom) {
+        if (rBegIt != rEndIt) {
+            Symbol s = *rBegIt++;
+            auto firstOc = startColumn + top;
+            auto endOc = startColumn + bottom + 1;
+            if (find(firstOc, endOc, s) != endOc) {
+                top = firstIndex[s] + get_position_checkpoint(last, s, checkIndex, top, checkpointSize);
+                bottom = firstIndex[s] + get_position_checkpoint(last, s, checkIndex, bottom + 1, checkpointSize) - 1;
             } else {
-                add_indices_with_partial_array(indices, last, checkIndex, suffArray, firstIndex, top, bottom + 1, checkpointSize);
                 break;
             }
+        } else {
+            for (size_t i = top; i < bottom + 1; ++i)
+                add_indices_with_partial_array(indices, last, checkIndex, suffArray, firstIndex, i, checkpointSize);
+            break;
         }
     }
+
     return indices;
 }
 
@@ -745,8 +744,118 @@ vector<int> find_substring_pos_with_BWT(const string& str, const Patterns& patte
     SuffixArray array(str);
     auto BWT = trans.get_transform();
     auto partialSuffixArray = array.get_k_suffix_array(checkpointSize);
-    auto indices = efficient_index_BW_matching(BWT, patterns, partialSuffixArray, checkpointSize);
+    auto firstIndex = build_first_occurrence_index(BWT);
+    vector<Symbol> syms;
+    for (auto pair : firstIndex)
+        syms.push_back(pair.first);
+
+    auto checkIndex = build_checkout_symbols_index(BWT, syms, checkpointSize);
+
+    vector<int> allIndices = {};
+    for (auto pattern : patterns) {
+        size_t top = 0;
+        size_t bottom = BWT.size() - 1;
+        auto indices =
+        efficient_index_BW_matching(BWT, pattern, firstIndex, checkIndex, partialSuffixArray, checkpointSize, top, bottom);
+        allIndices.insert(allIndices.end(), indices.begin(), indices.end());
+    }
+
+    sort(allIndices.begin(), allIndices.end());
+    return allIndices;
+}
+
+vector<int> approximate_BWT_search(const string& last,
+                                   const Pattern& pattern,
+                                   map<Symbol, int>& firstIndex,
+                                   map<Symbol, vector<int>>& checkIndex,
+                                   const vector<pair<int, int>>& suffArray,
+                                   int checkpointSize,
+                                   int maxMismatches) {
+
+
+    vector<int> indices;
+
+    auto top = (size_t)0;
+    auto bottom = last.size() - 1;
+    auto rBegIt = pattern.rbegin();
+    /*
+        // Code for exact matching for the first
+        // Need lots of changes to make it work - for example start
+        // from the first minExacMatches + 1 symbols and find the rest
+        // and not only the last one
+        auto minExactMatches = pattern.size() / (maxMismatches + 1);
+        auto remaining = pattern.size() - minExactMatches;
+        string exactMatch;
+        for (size_t i = 0; i < minExactMatches; ++i) {
+            exactMatch.insert(exactMatch.begin(), *rBegIt++);
+        }
+
+        auto pos = efficient_index_BW_matching(last, exactMatch, firstIndex, checkIndex, suffArray, checkpointSize, top,
+       bottom);
+        if (pos.size() == 0)
+            return indices;
+    */
+    vector<int> oldErrorCount(last.size(), 0);
+
+    for (size_t step = 0; step < pattern.size(); ++step) {
+
+        vector<int> errorCount(last.size(), -1);
+        int bestTop = (int)last.size() + 1;
+        int bestBottom = -1;
+        for (size_t i = top; i < bottom + 1; ++i) {
+            if (oldErrorCount[i] >= 0) {
+                Symbol s = last[i];
+
+                int localTop = firstIndex[s] + get_position_checkpoint(last, s, checkIndex, i, checkpointSize);
+                int localBottom = firstIndex[s] + get_position_checkpoint(last, s, checkIndex, i + 1, checkpointSize) - 1;
+                if (s != *rBegIt) {
+                    errorCount[localTop] = oldErrorCount[i] + 1;
+                    if (errorCount[localTop] > maxMismatches)
+                        errorCount[localTop] = -1;
+                } else {
+                    errorCount[localTop] = oldErrorCount[i];
+                }
+
+                bestTop = min(localTop, bestTop);
+                bestBottom = max(localBottom, bestBottom);
+            }
+        }
+        if (bestTop == (int)last.size() + 1)
+            return indices;
+        oldErrorCount = errorCount;
+        top = bestTop;
+        bottom = bestBottom;
+        rBegIt++;
+    }
+
+    for (size_t i = top; i < bottom + 1; ++i)
+        if (oldErrorCount[i] >= 0)
+            add_indices_with_partial_array(indices, last, checkIndex, suffArray, firstIndex, i, checkpointSize);
+
     return indices;
+}
+
+vector<int> multiple_approximate_BWT_search(const string& str, const Patterns& patterns, int checkpointSize, int maxMismatches) {
+    BurrowsWheelerTransformation trans(str);
+    SuffixArray array(str);
+    auto BWT = trans.get_transform();
+    auto partialSuffixArray = array.get_k_suffix_array(checkpointSize);
+    auto firstIndex = build_first_occurrence_index(BWT);
+    vector<Symbol> syms;
+    for (auto pair : firstIndex)
+        syms.push_back(pair.first);
+
+    auto checkIndex = build_checkout_symbols_index(BWT, syms, checkpointSize);
+
+    vector<int> allIndices = {};
+    for (auto pattern : patterns) {
+        auto indices =
+        approximate_BWT_search(BWT, pattern, firstIndex, checkIndex, partialSuffixArray, checkpointSize, maxMismatches);
+        allIndices.insert(allIndices.end(), indices.begin(), indices.end());
+    }
+
+    sort(allIndices.begin(), allIndices.end());
+    return allIndices;
 }
 
 void read_file(ifstream& file, Symbols& s, Patterns& p) {
@@ -768,10 +877,11 @@ int main() {
     string str;
     Patterns p;
     read_file(file, str, p);
+    int maxMismatches = stoi(p[p.size() - 1]);
+    p.pop_back();
 
     const int CHECKPOINT_ARRAY_SIZE_CONST = 5;
-    auto vec = find_substring_pos_with_BWT(str, p, CHECKPOINT_ARRAY_SIZE_CONST);
-    sort(vec.begin(), vec.end());
+    auto vec = multiple_approximate_BWT_search(str, p, CHECKPOINT_ARRAY_SIZE_CONST, maxMismatches);
     print_vector(answer, vec);
     return 0;
 }
